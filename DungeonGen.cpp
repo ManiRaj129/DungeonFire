@@ -4,7 +4,7 @@
 #include <float.h>
 #include <math.h>
 #include "DungeonGen.h"
-
+#include "Movement.h"
 void initializeDungeon(Dungeon *dungeon)
 {
     dungeon->roomCount = 0;
@@ -15,7 +15,7 @@ void initializeDungeon(Dungeon *dungeon)
         {
             if (y == 0 || y == DUNGEON_H - 1 || x == 0 || x == DUNGEON_W - 1)
             {
-                dungeon->grid[y][x].type = rockC;
+                dungeon->grid[y][x].type = immutableRock;
                 dungeon->grid[y][x].hardness = 255;
             }
             else
@@ -23,39 +23,59 @@ void initializeDungeon(Dungeon *dungeon)
                 dungeon->grid[y][x].type = rockC;
                 dungeon->grid[y][x].hardness = 1 + rand() % 255;
             }
+            dungeon->grid[y][x].occupant = '*';
+            dungeon->grid[y][x].obj = objtype_no_type;
         }
     }
 }
 
+/*
+old method to print in terminal
+*/
 void printDungeon(Dungeon *dungeon)
 {
     for (int y = 0; y < DUNGEON_H; y++)
     {
         for (int x = 0; x < DUNGEON_W; x++)
         {
-            switch (dungeon->grid[y][x].type)
+
+            if (dungeon->grid[y][x].occupant != '*')
             {
-            case rockC:
-                printf(" ");
-                break;
-            case roomC:
-                printf(".");
-                break;
-            case corridorC:
-                printf("#");
-                break;
-            case upStairC:
-                printf("<");
-                break;
-            case downStairC:
-                printf(">");
-                break;
-            case player:
-                printf("@");
-                break;
-            default:
-                // to track any cell missed to initialize
-                printf("?");
+                if (dungeon->grid[y][x].occupant == PLAYER)
+                {
+                    printf("@");
+                }
+                else
+                {
+                    printf("%x", dungeon->grid[y][x].occupant);
+                }
+            }
+            else
+            {
+                switch (dungeon->grid[y][x].type)
+                {
+                case rockC:
+                    printf(" ");
+                    break;
+                case immutableRock:
+                    printf(" ");
+                    break;
+                case roomC:
+                    printf(".");
+                    break;
+                case corridorC:
+                    printf("#");
+                    break;
+                case upStairC:
+                    printf("<");
+                    break;
+                case downStairC:
+                    printf(">");
+                    break;
+                default:
+                    // to track any cell missed to initialize
+                    printf("?");
+                }
             }
         }
         printf("\n");
@@ -73,7 +93,7 @@ int roomPossible(Dungeon *dungeon, Room *room)
     {
         for (int x = room->scol - 1; x < room->scol + room->width + 1; x++)
         {
-            if (dungeon->grid[y][x].type != rockC)
+            if (dungeon->grid[y][x].type == roomC)
             {
                 return 0;
             }
@@ -90,7 +110,7 @@ void constructRoom(Dungeon *dungeon, Room *room)
             dungeon->grid[y][x].type = roomC;
             dungeon->grid[y][x].hardness = 0;
         }
-    }    
+    }
 }
 
 void fitRooms(Dungeon *dungeon)
@@ -99,7 +119,7 @@ void fitRooms(Dungeon *dungeon)
     int counter = 0;
     while (dungeon->roomCount < MAX_ROOMS)
     {
-        int addLen=rand() % ROOM_MIN_W;
+        int addLen = rand() % ROOM_MIN_W;
         room.width = ROOM_MIN_W + addLen;
         room.height = ROOM_MIN_H + addLen;
         room.scol = 1 + rand() % (DUNGEON_W - room.width - 2);
@@ -107,7 +127,7 @@ void fitRooms(Dungeon *dungeon)
 
         if (roomPossible(dungeon, &room))
         {
-            constructRoom(dungeon, &room);  
+            constructRoom(dungeon, &room);
             dungeon->rooms[dungeon->roomCount++] = room;
         }
         if (dungeon->roomCount >= MIN_ROOMS && counter >= 10)
@@ -282,7 +302,7 @@ void fitMinStair(Dungeon *dungeon)
     int rNo = rand() % totalrooms;
     int r1col = dungeon->rooms[rNo].scol;
     int r1row = dungeon->rooms[rNo].srow;
-    rNo = rand() % (totalrooms-1);
+    rNo = rand() % (totalrooms - 1);
     int r2col = dungeon->rooms[rNo].scol;
     int r2row = dungeon->rooms[rNo].srow;
 
@@ -294,10 +314,10 @@ void fitMinStair(Dungeon *dungeon)
     dungeon->grid[r2row + 1][r2col + 2].type = downStairC;
     dungeon->grid[r2row + 1][r2col + 2].hardness = 0;
 
-    dungeon->stairCount +=2;
+    dungeon->stairCount += 2;
 
     // fit player at default place
-    dungeon->grid[dungeon->rooms[0].srow][dungeon->rooms[0].scol].type=player;
+    dungeon->grid[dungeon->rooms[0].srow][dungeon->rooms[0].scol].occupant = PLAYER;
+    dungeon->PlayerPos.x = dungeon->rooms[0].scol;
+    dungeon->PlayerPos.y = dungeon->rooms[0].srow;
 }
-
-

@@ -7,7 +7,7 @@
 #include <math.h>
 #include <endian.h>
 #include "DungeonGen.h"
-
+#include "Movement.h"
 typedef struct
 {
     uint8_t x, y;
@@ -15,7 +15,6 @@ typedef struct
 
 void getDirPath(char **dungeon_file_path)
 {
-
     char *home;
     int dungeon_file_path_length;
 
@@ -24,16 +23,16 @@ void getDirPath(char **dungeon_file_path)
     {
         printf("Failed to get HOME environment variable\n");
     }
-    dungeon_file_path_length = strlen(home) + strlen("/.rlg327/dungeon") + 1; //+1 for null byte
+    dungeon_file_path_length = strlen(home) + strlen("/.rlg327/09.rlg327") + 1; //+1 for null byte
 
-    *dungeon_file_path = malloc(dungeon_file_path_length * sizeof(char));
+    *dungeon_file_path = (char *)malloc(dungeon_file_path_length * sizeof(char));
     if (*dungeon_file_path == NULL)
     {
         printf("memory allocation failed for dungeon_file_path");
     }
 
     strcpy(*dungeon_file_path, home);
-    strcat(*dungeon_file_path, "/.rlg327/dungeon");
+    strcat(*dungeon_file_path, "/.rlg327/09.rlg327");
     (*dungeon_file_path)[dungeon_file_path_length - 1] = '\0';
 }
 
@@ -53,13 +52,21 @@ void processDungeon(Dungeon *dungeon, FILE *f, int isLoad)
                 }
 
                 dungeon->grid[i][j].hardness = val;
+                dungeon->grid[i][j].occupant = '*';
                 if (val == 0)
                 {
                     dungeon->grid[i][j].type = corridorC; // will assign appropriate openspace later
                 }
                 else
                 {
-                    dungeon->grid[i][j].type = rockC;
+                    if (val == 255)
+                    {
+                        dungeon->grid[i][j].type = immutableRock;
+                    }
+                    else
+                    {
+                        dungeon->grid[i][j].type = rockC;
+                    }
                 }
             }
             else
@@ -216,7 +223,7 @@ void load(Dungeon *dungeon, const char *dungeon_file_path)
     roomCount = be16toh(roomCount);
     dungeon->roomCount = roomCount;
 
-    dungeon->rooms = malloc(sizeof(Room) * roomCount);
+    dungeon->rooms = (Room *)malloc(sizeof(Room) * roomCount);
     if (dungeon->rooms == NULL)
     {
         printf("%s", "room allocation with malloc failed");
@@ -225,7 +232,9 @@ void load(Dungeon *dungeon, const char *dungeon_file_path)
 
     // fetch rooms and the third argument specifies the load operation
     processRooms(dungeon, f, 1);
-    dungeon->grid[player_Y][player_X].type = player;
+    dungeon->grid[player_Y][player_X].occupant = PLAYER;
+    dungeon->PlayerPos.x = player_X;
+    dungeon->PlayerPos.y = player_Y;
 
     // fetch upward stairs count
     uint16_t upStairCount = 0;
@@ -253,7 +262,7 @@ void load(Dungeon *dungeon, const char *dungeon_file_path)
 
     fclose(f);
 }
-void findStairsAndPlayer(Dungeon *dungeon, uint16_t *upStairCount, uint16_t *downStairCount, stair upStairs[], stair downStairs[], uint8_t *playX, uint8_t *playY)
+void findStairs(Dungeon *dungeon, uint16_t *upStairCount, uint16_t *downStairCount, stair upStairs[], stair downStairs[])
 {
     for (int y = 1; y < DUNGEON_H - 1; y++)
     {
@@ -270,11 +279,6 @@ void findStairsAndPlayer(Dungeon *dungeon, uint16_t *upStairCount, uint16_t *dow
                 downStairs[*downStairCount].x = (uint8_t)x;
                 downStairs[*downStairCount].y = (uint8_t)y;
                 (*downStairCount)++;
-            }
-            else if (dungeon->grid[y][x].type == player)
-            {
-                *playX = (uint8_t)x;
-                *playY = (uint8_t)y;
             }
         }
     }
@@ -299,7 +303,7 @@ void save(Dungeon *dungeon, const char *dungeon_file_path)
         printf("failed to open file at %s\n", dungeon_file_path);
     }
 
-    char *marker = "RLG327-S2025";
+    const char *marker = "RLG327-S2025";
     fwrite(marker, sizeof(char), 12, f);
 
     uint32_t version = 0;
@@ -311,17 +315,15 @@ void save(Dungeon *dungeon, const char *dungeon_file_path)
     fileSize = htobe32(fileSize);
     fwrite(&fileSize, sizeof(fileSize), 1, f);
 
-    // process the entire dungeon to fetch player, up and down stair info
+    // process the entire dungeon to fetch up and down stair info
     uint16_t upStairCount = 0;
     uint16_t downStairCount = 0;
-
-    uint8_t player_X = 0;
-    uint8_t player_Y = 0;
-
     stair upstairs[dungeon->stairCount];
     stair downstairs[dungeon->stairCount];
-    findStairsAndPlayer(dungeon, &upStairCount, &downStairCount, upstairs, downstairs, &player_X, &player_Y);
+    findStairs(dungeon, &upStairCount, &downStairCount, upstairs, downstairs);
 
+    uint8_t player_X = dungeon->PlayerPos.x;
+    uint8_t player_Y = dungeon->PlayerPos.y;
     fwrite(&player_X, sizeof(player_X), 1, f);
     fwrite(&player_Y, sizeof(player_Y), 1, f);
 
